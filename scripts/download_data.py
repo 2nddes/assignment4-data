@@ -2,14 +2,29 @@ import bz2
 import gzip
 import re
 import shutil
-import urllib.request
 from pathlib import Path
 
 import modal
 
 from cs336_data.common import get_shared_assets_path
+from cs336_data.download_utils import (
+    commoncrawl_url,
+    download_file,
+    fasttext_lid_url,
+    huggingface_resolve_url,
+    urlopen_with_retries,
+    wikimedia_url,
+)
 from cs336_data.modal_utils import VOLUME_MOUNTS, app, build_image
 from cs336_data.wet_files import EnglishWetFiles
+
+""" RUN
+$env:CS336_HF_ENDPOINT = "https://hf-mirror.com"
+$env:HF_ENDPOINT = "https://hf-mirror.com"
+$env:CS336_DOWNLOAD_RETRIES = "5"
+$env:CS336_DOWNLOAD_TIMEOUT = "120"
+uv run scripts/download_data.py --offline-only
+"""
 
 
 @app.function(image=build_image(), volumes=VOLUME_MOUNTS, timeout=60 * 60 * 12, max_containers=128)
@@ -23,7 +38,7 @@ def extract_wiki_urls(shard: str) -> list[str]:
     )
 
     print(f"[wiki] downloading {shard}", flush=True)
-    urllib.request.urlretrieve(f"https://dumps.wikimedia.org/enwiki/{dump_date}/{shard}", dump)
+    download_file(wikimedia_url("enwiki", dump_date, shard), dump, label=shard)
     urls = []
     with bz2.open(dump, "rt", errors="ignore") as f:
         for line in f:
@@ -35,44 +50,49 @@ def extract_wiki_urls(shard: str) -> list[str]:
 
 def download_offline_files(*, root_path: Path) -> None:
     paloma_out = root_path / "tokenized_paloma_c4_100_domains_validation.bin"
-    if not paloma_out.exists():
-        print(f"[huggingface] downloading {paloma_out.name}", flush=True)
-        urllib.request.urlretrieve(
-            "https://huggingface.co/datasets/brunborg/cs336-a4/resolve/main/tokenized_paloma_c4_100_domains_validation.bin",
-            paloma_out,
-        )
+    download_file(
+        huggingface_resolve_url(
+            "brunborg/cs336-a4",
+            "tokenized_paloma_c4_100_domains_validation.bin",
+            repo_type="dataset",
+        ),
+        paloma_out,
+        label=paloma_out.name,
+    )
 
     cc = root_path / "CC"
     cc.mkdir(parents=True, exist_ok=True)
     for kind, out_name in [("warc", "example.warc.gz"), ("wet", "example.warc.wet.gz")]:
         out = cc / out_name
-        if not out.exists():
-            print(f"[cc] downloading {out_name}", flush=True)
-            with urllib.request.urlopen(
-                f"https://data.commoncrawl.org/crawl-data/CC-MAIN-2026-12/{kind}.paths.gz"
-            ) as r:
-                first_path = gzip.decompress(r.read()).decode().splitlines()[0]
-            urllib.request.urlretrieve(f"https://data.commoncrawl.org/{first_path}", out)
+        if out.exists() and out.stat().st_size > 0:
+            print(f"[download] using cached {out}", flush=True)
+            continue
+
+        paths_file = root_path / "metadata" / f"CC-MAIN-2026-12-{kind}.paths.gz"
+        download_file(
+            commoncrawl_url("crawl-data", "CC-MAIN-2026-12", f"{kind}.paths.gz"),
+            paths_file,
+            label=paths_file.name,
+        )
+        first_path = gzip.decompress(paths_file.read_bytes()).decode().splitlines()[0]
+        download_file(commoncrawl_url(first_path), out, label=out_name)
 
     for rel_path, url in [
         (
             "classifiers/lid.176.bin",
-            "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin",
+            fasttext_lid_url(),
         ),
         (
             "classifiers/dolma_fasttext_hatespeech_jigsaw_model.bin",
-            "https://huggingface.co/allenai/dolma-jigsaw-fasttext-bigrams-hatespeech/resolve/main/model.bin",
+            huggingface_resolve_url("allenai/dolma-jigsaw-fasttext-bigrams-hatespeech", "model.bin"),
         ),
         (
             "classifiers/dolma_fasttext_nsfw_jigsaw_model.bin",
-            "https://huggingface.co/allenai/dolma-jigsaw-fasttext-bigrams-nsfw/resolve/main/model.bin",
+            huggingface_resolve_url("allenai/dolma-jigsaw-fasttext-bigrams-nsfw", "model.bin"),
         ),
     ]:
         out = root_path / rel_path
-        out.parent.mkdir(parents=True, exist_ok=True)
-        if not out.exists():
-            print(f"[file] downloading {rel_path}", flush=True)
-            urllib.request.urlretrieve(url, out)
+        download_file(url, out, label=rel_path)
 
 
 @app.function(image=build_image(), volumes=VOLUME_MOUNTS, timeout=60 * 60 * 12)
@@ -83,8 +103,9 @@ def main(offline_only: bool = False):
         return
 
     dump_date = "20260501"
-    base_url = f"https://dumps.wikimedia.org/enwiki/{dump_date}/"
-    html = urllib.request.urlopen(base_url).read().decode()
+    base_url = wikimedia_url("enwiki", dump_date)
+    with urlopen_with_retries(base_url) as response:
+        html = response.read().decode()
     shards = sorted(
         set(re.findall(rf"enwiki-{dump_date}-pages-articles-multistream[0-9]+\.xml-p[0-9]+p[0-9]+\.bz2", html))
     )

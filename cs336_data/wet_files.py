@@ -1,24 +1,20 @@
 import gzip
 import shutil
 import tempfile
-import urllib.request
 from functools import cached_property
 from io import BytesIO
 from pathlib import Path
 
 from collections.abc import Callable
-import fasttext
 import modal
 import polars as pl
 from warcio.archiveiterator import ArchiveIterator
 from warcio.warcwriter import WARCWriter
 
 from cs336_data.common import get_shared_assets_path
+from cs336_data.download_utils import commoncrawl_url, download_file, fasttext_lid_url
 from cs336_data.modal_utils import VOLUME_MOUNTS, app, build_image
 from furu import Furu
-
-BASE_URL = "https://data.commoncrawl.org/"
-
 
 
 class _EnglishWetFile(Furu[Path]):
@@ -29,7 +25,10 @@ class _EnglishWetFile(Furu[Path]):
 
         self.logger.info("Loading English language identifier")
         is_english: Callable[[str], bool] = "TODO"
-        assert is_english != "TODO", "you need to implement is_english. we use probability >= 0.7 with https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin"
+        assert is_english != "TODO", (
+            "you need to implement is_english. we use probability >= 0.7 with "
+            f"{fasttext_lid_url()}"
+        )
 
         total_text = 0
         skipped_text = 0
@@ -48,7 +47,7 @@ class _EnglishWetFile(Furu[Path]):
                 local_wet_path = Path("/tmp") / wet_url.split("/")[-1]
                 if not local_wet_path.exists():
                     self.logger.info("Downloading %s to %s", wet_url, local_wet_path)
-                    urllib.request.urlretrieve(wet_url, local_wet_path)
+                    download_file(wet_url, local_wet_path, label=local_wet_path.name)
                 else:
                     self.logger.info("Using cached WET file %s", local_wet_path)
                 with gzip.open(local_wet_path, "rb") as input_stream:
@@ -93,16 +92,19 @@ class EnglishWetFiles(Furu[list[Path]]):
 
     def _create(self) -> list[Path]:
         assert self.n_files % self.group_size == 0
-        wet_paths = f"{BASE_URL}crawl-data/{self.crawl_id}/wet.paths.gz"
-        self.logger.info("Loading WET paths from %s", wet_paths)
+        wet_paths_url = commoncrawl_url("crawl-data", self.crawl_id, "wet.paths.gz")
+        wet_paths_file = get_shared_assets_path() / "metadata" / f"{self.crawl_id}-wet.paths.gz"
+        self.logger.info("Loading WET paths from %s", wet_paths_url)
+        download_file(wet_paths_url, wet_paths_file, label=wet_paths_file.name)
 
         wet_urls = list(
-            BASE_URL
-            + pl.read_csv(
-                wet_paths,
+            pl.read_csv(
+                wet_paths_file,
                 has_header=False,
                 new_columns=["wet_path"],
-            ).sample(n=self.n_files, shuffle=True, seed=self.shuffle_seed, with_replacement=False)["wet_path"]
+            )
+            .with_columns(pl.col("wet_path").map_elements(commoncrawl_url, return_dtype=pl.String))
+            .sample(n=self.n_files, shuffle=True, seed=self.shuffle_seed, with_replacement=False)["wet_path"]
         )
 
         self.logger.info("Selected %d WET files for crawl %s", len(wet_urls), self.crawl_id)

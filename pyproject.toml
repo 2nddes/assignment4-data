@@ -12,7 +12,7 @@ dependencies = [
     "pytest>=8.3.5",
     "xopen>=2.0.2",
     "resiliparse>=0.15.2",
-    "fasttext>=0.9.3",
+    "fasttext-wheel>=0.9.2",
     "mmh3>=5.1.0",
     "nltk>=3.9.1",
     "fastwarc>=0.15.2",
@@ -33,14 +33,20 @@ dependencies = [
     "warcio>=1.8.1",
     "pytest-timeout>=2.4.0",
     "torch>=2.11.0",
+    "pandas>=2.3.3",
+    "scikit-learn>=1.9.0",
 ]
 
 [tool.setuptools.packages.find]
-include = ["cs336_data", "tests", "cs336_basics"]
+include = ["cs336_data", "tests", "cs336_basics", "answers"]
 
 [tool.uv]
 package = true
 python-preference = "managed"
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
 
 [tool.pytest.ini_options]
 log_cli = true

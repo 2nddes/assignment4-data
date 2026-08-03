@@ -42,6 +42,37 @@ Data is available at `/shared-data`, such as `uv run modal shell ./scripts/downl
 To only download the files needed for running offline, run `uv run scripts/download_data.py --offline-only`.
 To download all data for the students, run `uv run modal run scripts/download_data.py`
 
+The downloader is safe to rerun. Completed files are reused, incomplete downloads are kept as
+`.part` files, and the next run will try to resume them before restarting the file.
+
+Useful environment variables:
+
+```sh
+# Hugging Face-compatible endpoint. CS336_HF_ENDPOINT has priority over HF_ENDPOINT.
+CS336_HF_ENDPOINT=https://huggingface.co
+HF_ENDPOINT=https://huggingface.co
+
+# Optional mirrors or custom endpoints for other sources.
+CS336_COMMONCRAWL_BASE_URL=https://data.commoncrawl.org
+CS336_WIKIMEDIA_BASE_URL=https://dumps.wikimedia.org
+CS336_FASTTEXT_BASE_URL=https://dl.fbaipublicfiles.com
+
+# Retry and timeout controls.
+CS336_DOWNLOAD_RETRIES=3
+CS336_DOWNLOAD_TIMEOUT=60
+```
+
+For downloading from networks where `huggingface.co` is slow or blocked, set a Hugging
+Face-compatible mirror before running the command. On PowerShell:
+
+```powershell
+$env:CS336_HF_ENDPOINT = "https://hf-mirror.com"
+$env:HF_ENDPOINT = "https://hf-mirror.com"
+$env:CS336_DOWNLOAD_RETRIES = "5"
+$env:CS336_DOWNLOAD_TIMEOUT = "120"
+uv run scripts/download_data.py --offline-only
+```
+
 ### For non-students
 
 To only download the files needed for running offline, run `uv run scripts/download_data.py --offline-only`.
