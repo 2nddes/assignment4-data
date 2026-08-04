@@ -51,7 +51,8 @@ def run_gopher_quality_filter(text: str) -> bool:
 def run_exact_line_deduplication(
     input_files: list[os.PathLike], output_directory: os.PathLike
 ):
-    raise NotImplementedError
+    from answers.utils import deduplicate_corpus
+    return deduplicate_corpus(input_files=input_files, output_dir=output_directory)
 
 
 def run_minhash_deduplication(
@@ -62,4 +63,10 @@ def run_minhash_deduplication(
     jaccard_threshold: float,
     output_directory: os.PathLike,
 ):
-    raise NotImplementedError
+    from answers.utils import deduplicate_documents
+    return deduplicate_documents(input_paths=input_files,
+                                num_hashes=num_hashes, 
+                                num_bands=num_bands,
+                                  ngram_size=ngrams, 
+                                  jaccard_threshold=jaccard_threshold, 
+                                  output_dir=output_directory)

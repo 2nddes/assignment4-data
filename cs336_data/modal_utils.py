@@ -22,8 +22,6 @@ def build_image(*, include_tests: bool = False) -> modal.Image:
     image = image.uv_sync()
     image = image.add_local_python_source("cs336_basics")
     image = image.add_local_python_source("cs336_data")
-    image = image.add_local_file("AGENTS.md", "/root/AGENTS.md")
-    image = image.add_local_file("CLAUDE.md", "/root/CLAUDE.md")
     if include_tests:
         image = image.add_local_dir("tests", remote_path="/root/tests")
     return image
