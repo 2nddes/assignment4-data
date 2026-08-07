@@ -26,6 +26,13 @@ def get_download_timeout_seconds() -> int:
     return int(os.environ.get("CS336_DOWNLOAD_TIMEOUT", DEFAULT_DOWNLOAD_TIMEOUT_SECONDS))
 
 
+def human_size(num_bytes: int) -> str:
+    mb = num_bytes / (1024 * 1024)
+    if mb >= 1024:
+        return f"{mb / 1024:.2f} GB"
+    return f"{mb:.1f} MB"
+
+
 def join_url(base_url: str, *parts: str) -> str:
     suffix = "/".join(str(part).strip("/") for part in parts if str(part).strip("/"))
     return f"{base_url.rstrip('/')}/{suffix}" if suffix else base_url.rstrip("/")
@@ -88,7 +95,7 @@ def urlopen_with_retries(url: str):
 def download_file(url: str, output_path: Path, *, label: str | None = None) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if output_path.exists() and output_path.stat().st_size > 0:
-        print(f"[download] using cached {output_path}", flush=True)
+        print(f"[download] using cached {output_path} ({human_size(output_path.stat().st_size)})", flush=True)
         return output_path
 
     part_path = output_path.with_name(f"{output_path.name}.part")
@@ -119,6 +126,7 @@ def download_file(url: str, output_path: Path, *, label: str | None = None) -> P
             if not part_path.exists() or part_path.stat().st_size == 0:
                 raise RuntimeError(f"download produced an empty file: {url}")
             part_path.replace(output_path)
+            print(f"[download] finished {name} ({human_size(output_path.stat().st_size)})", flush=True)
             return output_path
         except urllib.error.HTTPError as error:
             last_error = error

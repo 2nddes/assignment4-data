@@ -26,6 +26,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -51,7 +52,7 @@ logger = logging.getLogger(__name__)
 N_GPUS = 8
 DEFAULT_MODAL_VALID_BIN = "/shared-data/tokenized_paloma_c4_100_domains_validation.bin"
 DEFAULT_MODAL_MODEL_OUTPUT = "/root/data/output/your_data"
-LOCAL_DATA_DIR = Path("/tmp/data")
+LOCAL_DATA_DIR = Path(tempfile.gettempdir()) / "data"
 EPHEMERAL_DISK_MB = 52_4288
 
 if torch.cuda.is_available():
